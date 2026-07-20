@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#e4472f">
   <title>MINI 4WD SETTING GARAGE</title>
-  <link rel="stylesheet" href="styles.css?v=2">
+  <link rel="stylesheet" href="styles.css?v=3">
 </head>
 <body>
   <header class="topbar">
@@ -26,6 +26,11 @@
       <div class="page-heading split"><div><span class="eyebrow">YOUR MACHINES</span><h1>マイガレージ</h1><p>組み上げた状態を写真とパーツ番号で残す。</p></div><button class="primary" data-view="build">マシンを登録</button></div>
       <div id="machine-list" class="machine-grid"></div>
       <div id="empty-state" class="empty-state"><div class="empty-car"></div><h2>まだマシンが登録されていません</h2><p>右下の＋から最初のマシンを追加してください。</p><button class="primary" data-view="build">1台目を登録</button></div>
+    </section>
+
+    <section id="detail-view" class="view page">
+      <button id="detail-back" class="back-button" type="button">← ガレージへ戻る</button>
+      <div id="machine-detail"></div>
     </section>
 
     <section id="build-view" class="view page">
@@ -73,6 +78,6 @@
   </main>
 
   <footer><b>MINI 4WD SETTING GARAGE</b><span>GitHub Pages Edition</span></footer>
-  <script src="app.js?v=2"></script>
+  <script src="app.js?v=3"></script>
 </body>
 </html>

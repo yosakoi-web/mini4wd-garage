@@ -30,6 +30,7 @@ const CHASSIS = {
 
 let db;
 let photoFiles = {};
+let currentMachines = [];
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -152,20 +153,84 @@ function escapeHtml(value = "") {
   return String(value ?? "").replace(/[&<>'"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
 }
 
+function focusNextField(current) {
+  const controls = [...$("#machine-form").querySelectorAll("input:not([type=file]), select, textarea, button[type=submit]")]
+    .filter(control => !control.disabled && control.offsetParent !== null);
+  const index = controls.indexOf(current);
+  const next = controls[index + 1];
+  if (next) {
+    next.focus({ preventScroll: true });
+    next.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+}
+
+function setupFormNavigation() {
+  const form = $("#machine-form");
+  form.querySelectorAll("input:not([type=file])").forEach(input => {
+    input.enterKeyHint = "next";
+    input.addEventListener("keydown", event => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      focusNextField(input);
+    });
+  });
+  if (matchMedia("(pointer: coarse)").matches) {
+    form.querySelectorAll("select").forEach(select => select.addEventListener("change", () => {
+      window.setTimeout(() => focusNextField(select), 80);
+    }));
+  }
+}
+
+function showMachineDetail(id) {
+  const machine = currentMachines.find(item => item.id === id);
+  if (!machine) return toast("マシン情報が見つかりませんでした");
+  const photos = PHOTO_SLOTS.filter(([key]) => machine.photos?.[key]).map(([key, label]) => `
+    <figure><img src="${machine.photos[key]}" alt="${escapeHtml(label)}"><figcaption>${escapeHtml(label)}</figcaption></figure>`).join("");
+  const parts = PART_GROUPS.map(([zone, label]) => {
+    const items = Array.isArray(machine.parts?.[zone]) ? machine.parts[zone] : [];
+    return `<section class="detail-parts"><h3>${escapeHtml(label)}</h3>${items.length ? `<ol>${items.map(part => `<li><b>${escapeHtml(part.code || "番号なし")}</b><span>${escapeHtml(part.name || "パーツ名未登録")}</span></li>`).join("")}</ol>` : `<p>登録なし</p>`}</section>`;
+  }).join("");
+  $("#machine-detail").innerHTML = `
+    <header class="detail-heading"><span class="eyebrow">MACHINE DETAIL</span><h1>${escapeHtml(machine.name)}</h1><p>${escapeHtml(machine.chassis || "未登録")} シャーシ</p></header>
+    ${photos ? `<div class="detail-photos">${photos}</div>` : `<div class="detail-no-photo">写真は登録されていません</div>`}
+    <section class="detail-section"><h2>基本セッティング</h2><dl class="detail-specs">
+      <div><dt>ボディ</dt><dd>${escapeHtml(machine.body || "未登録")}</dd></div>
+      <div><dt>モーター</dt><dd>${escapeHtml(machine.motor || "未登録")}</dd></div>
+      <div><dt>回転数</dt><dd>${machine.motorRpm ? `${escapeHtml(machine.motorRpm)} rpm` : "未登録"}</dd></div>
+      <div><dt>ギア比</dt><dd>${machine.gearRatio ? `${escapeHtml(machine.gearRatio)} : 1` : "未登録"}</dd></div>
+      <div><dt>タイヤ径</dt><dd>${machine.tireDiameter ? `${escapeHtml(machine.tireDiameter)} mm` : "未登録"}</dd></div>
+      <div><dt>総重量</dt><dd>${machine.weight ? `${escapeHtml(machine.weight)} g` : "未登録"}</dd></div>
+    </dl></section>
+    <section class="detail-section"><h2>使用パーツ</h2><div class="detail-parts-grid">${parts}</div></section>
+    <section class="detail-section"><h2>セッティングメモ</h2><p class="detail-memo">${escapeHtml(machine.memo || "メモは登録されていません")}</p></section>`;
+  showView("detail");
+}
+
 async function renderGarage() {
   const machines = (await getMachines()).sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+  currentMachines = machines;
   $("#empty-state").hidden = machines.length > 0;
   $("#machine-list").innerHTML = machines.map(machine => {
     const photo = Object.values(machine.photos || {}).find(Boolean);
     const partCount = Object.values(machine.parts || {}).reduce((total, parts) => total + (Array.isArray(parts) ? parts.length : 0), 0);
-    return `<article class="machine-card">
+    return `<article class="machine-card" data-machine="${machine.id}" tabindex="0" role="button" aria-label="${escapeHtml(machine.name)}の詳細を見る">
       <div class="machine-photo">${photo ? `<img src="${photo}" alt="${escapeHtml(machine.name)}">` : `<div class="empty-car"></div>`}</div>
       <div class="machine-card-body"><small>${escapeHtml(machine.chassis)} / ${escapeHtml(machine.gearRatio)}:1</small><h2>${escapeHtml(machine.name)}</h2>
         <p>${escapeHtml(machine.motor || "モーター未登録")}　登録パーツ ${partCount}点</p>
         ${machine.memo ? `<blockquote>${escapeHtml(machine.memo)}</blockquote>` : ""}
-        <button class="delete-button" data-delete="${machine.id}">このマシンを削除</button>
+        <button class="detail-button" data-detail="${machine.id}" type="button">詳細を見る</button>
+        <button class="delete-button" data-delete="${machine.id}" type="button">このマシンを削除</button>
       </div></article>`;
   }).join("");
+  $$('[data-machine]').forEach(card => {
+    card.addEventListener("click", event => {
+      if (event.target.closest("[data-delete]")) return;
+      showMachineDetail(card.dataset.machine);
+    });
+    card.addEventListener("keydown", event => {
+      if ((event.key === "Enter" || event.key === " ") && !event.target.closest("button")) showMachineDetail(card.dataset.machine);
+    });
+  });
   $$('[data-delete]').forEach(button => button.addEventListener("click", async () => {
     if (!confirm("このマシンを削除しますか？")) return;
     await removeMachine(button.dataset.delete);
@@ -195,6 +260,7 @@ async function initialize() {
   renderPhotoSlots();
   renderPartGroups();
   renderGearList();
+  setupFormNavigation();
   updateInsights();
   updateComparison();
   try {
@@ -206,18 +272,23 @@ async function initialize() {
 
   $$('[data-view]').forEach(button => button.addEventListener("click", () => showView(button.dataset.view)));
   $("#add-machine").addEventListener("click", () => { resetForm(); showView("build"); });
+  $("#detail-back").addEventListener("click", () => showView("garage"));
   ["#chassis", "#gear-ratio", "#motor-rpm", "#tire-diameter"].forEach(selector => $(selector).addEventListener("input", updateInsights));
   ["#compare-from", "#compare-to"].forEach(selector => $(selector).addEventListener("input", updateComparison));
 
   $("#machine-form").addEventListener("submit", async event => {
     event.preventDefault();
+    if (!event.submitter) {
+      focusNextField(document.activeElement);
+      return;
+    }
     if (!db) return toast("ブラウザの保存領域を利用できません");
     const name = $("#machine-name").value.trim();
     if (!name) {
       $("#machine-name").focus();
       return toast("マシン名を入力してください");
     }
-    const submit = event.submitter || $("#machine-form button[type=submit]");
+    const submit = event.submitter;
     submit.disabled = true;
     submit.textContent = Object.keys(photoFiles).length ? "写真を保存中…" : "保存中…";
     let saved = false;
