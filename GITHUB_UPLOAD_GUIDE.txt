@@ -1,0 +1,14 @@
+MINI 4WD GARAGE  GitHubアップロード手順
+
+1. ZIPを展開します。
+2. https://github.com/yosakoi-web/mini4wd-garage を開きます。
+3. uploading an existing file を選びます。
+4. 展開したフォルダの中身をすべてドラッグします。
+5. Commit changes を押します。
+
+写真解析機能は削除済みです。
+右下の＋ボタンから複数のマシンを追加できます。
+
+注意
+このZIPはアプリのソースコードです。
+GitHub Pagesだけでは写真保存用のサーバー機能は動作しません。

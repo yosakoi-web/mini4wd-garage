@@ -1,0 +1,20 @@
+CREATE TABLE `machines` (
+	`id` text PRIMARY KEY NOT NULL,
+	`name` text NOT NULL,
+	`chassis` text NOT NULL,
+	`body` text DEFAULT '' NOT NULL,
+	`motor` text DEFAULT '' NOT NULL,
+	`motor_rpm` integer DEFAULT 20000 NOT NULL,
+	`gear_ratio` real DEFAULT 4 NOT NULL,
+	`tire_diameter` real DEFAULT 26 NOT NULL,
+	`weight` real DEFAULT 0 NOT NULL,
+	`front_parts` text DEFAULT '[]' NOT NULL,
+	`side_parts` text DEFAULT '[]' NOT NULL,
+	`rear_parts` text DEFAULT '[]' NOT NULL,
+	`internal_parts` text DEFAULT '[]' NOT NULL,
+	`detected_parts` text DEFAULT '[]' NOT NULL,
+	`photo_keys` text DEFAULT '{}' NOT NULL,
+	`memo` text DEFAULT '' NOT NULL,
+	`created_at` integer NOT NULL,
+	`updated_at` integer NOT NULL
+);
