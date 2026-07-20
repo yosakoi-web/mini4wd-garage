@@ -49,6 +49,7 @@ function transact(mode, callback) {
     const result = callback(transaction.objectStore("machines"));
     transaction.oncomplete = () => resolve(result?.result);
     transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(transaction.error || new Error("保存処理が中断されました"));
   });
 }
 
@@ -148,15 +149,15 @@ function collectParts() {
 }
 
 function escapeHtml(value = "") {
-  return value.replace(/[&<>'"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
+  return String(value ?? "").replace(/[&<>'"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
 }
 
 async function renderGarage() {
-  const machines = (await getMachines()).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const machines = (await getMachines()).sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
   $("#empty-state").hidden = machines.length > 0;
   $("#machine-list").innerHTML = machines.map(machine => {
     const photo = Object.values(machine.photos || {}).find(Boolean);
-    const partCount = Object.values(machine.parts || {}).flat().length;
+    const partCount = Object.values(machine.parts || {}).reduce((total, parts) => total + (Array.isArray(parts) ? parts.length : 0), 0);
     return `<article class="machine-card">
       <div class="machine-photo">${photo ? `<img src="${photo}" alt="${escapeHtml(machine.name)}">` : `<div class="empty-car"></div>`}</div>
       <div class="machine-card-body"><small>${escapeHtml(machine.chassis)} / ${escapeHtml(machine.gearRatio)}:1</small><h2>${escapeHtml(machine.name)}</h2>
@@ -211,15 +212,21 @@ async function initialize() {
   $("#machine-form").addEventListener("submit", async event => {
     event.preventDefault();
     if (!db) return toast("ブラウザの保存領域を利用できません");
-    const submit = event.submitter;
+    const name = $("#machine-name").value.trim();
+    if (!name) {
+      $("#machine-name").focus();
+      return toast("マシン名を入力してください");
+    }
+    const submit = event.submitter || $("#machine-form button[type=submit]");
     submit.disabled = true;
-    submit.textContent = "写真を保存中…";
+    submit.textContent = Object.keys(photoFiles).length ? "写真を保存中…" : "保存中…";
+    let saved = false;
     try {
       const photos = {};
       await Promise.all(Object.entries(photoFiles).map(async ([key, file]) => { photos[key] = await compressImage(file); }));
       const machine = {
         id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
-        name: $("#machine-name").value.trim(), chassis: $("#chassis").value,
+        name, chassis: $("#chassis").value,
         body: $("#body-name").value.trim(), motor: $("#motor").value.trim(),
         motorRpm: Number($("#motor-rpm").value), gearRatio: Number($("#gear-ratio").value),
         tireDiameter: Number($("#tire-diameter").value), weight: Number($("#weight").value) || null,
@@ -227,12 +234,22 @@ async function initialize() {
         createdAt: new Date().toISOString()
       };
       await saveMachine(machine);
-      resetForm();
+      saved = true;
       await renderGarage();
+      resetForm();
       showView("garage");
       toast("マシンをガレージへ保存しました");
     } catch (error) {
-      toast("保存できませんでした。写真を減らしてお試しください");
+      console.error(error);
+      if (saved) {
+        resetForm();
+        showView("garage");
+        toast("保存しました。画面を再読み込みしてください");
+      } else if (error?.name === "QuotaExceededError") {
+        toast("ブラウザの保存容量が不足しています。登録済み写真を減らしてください");
+      } else {
+        toast("保存できませんでした。入力内容はそのまま残しています");
+      }
     } finally {
       submit.disabled = false;
       submit.textContent = "ガレージへ保存";
