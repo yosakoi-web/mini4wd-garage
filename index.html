@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#e4472f">
+  <title>MINI 4WD SETTING GARAGE</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <button class="brand" data-view="garage"><span class="car-mark"></span><span><b>MINI 4WD</b><small>SETTING GARAGE</small></span></button>
+    <nav>
+      <button class="nav-button active" data-view="garage">ガレージ</button>
+      <button class="nav-button" data-view="build">マシン登録</button>
+      <button class="nav-button" data-view="gears">ギア比ガイド</button>
+    </nav>
+    <button class="primary desktop-add" data-view="build">新規マシン</button>
+  </header>
+
+  <button id="add-machine" class="fab" aria-label="マシンを追加"><b>＋</b><span>マシン追加</span></button>
+  <div id="toast" class="toast" hidden></div>
+
+  <main>
+    <section id="garage-view" class="view active page">
+      <div class="page-heading split"><div><span class="eyebrow">YOUR MACHINES</span><h1>マイガレージ</h1><p>組み上げた状態を写真とパーツ番号で残す。</p></div><button class="primary" data-view="build">マシンを登録</button></div>
+      <div id="machine-list" class="machine-grid"></div>
+      <div id="empty-state" class="empty-state"><div class="empty-car"></div><h2>まだマシンが登録されていません</h2><p>右下の＋から最初のマシンを追加してください。</p><button class="primary" data-view="build">1台目を登録</button></div>
+    </section>
+
+    <section id="build-view" class="view page">
+      <div class="page-heading"><span class="eyebrow">NEW MACHINE</span><h1>マシン登録</h1><p>写真と使用パーツを登録して、現在のセッティングを残します。</p></div>
+      <form id="machine-form">
+        <div class="step-block">
+          <div class="step-title"><span>01</span><div><h2>基本セッティング</h2><p>マシンの土台となる情報</p></div></div>
+          <div class="form-grid">
+            <label class="field wide"><span>マシン名 <b>必須</b></span><input id="machine-name" required placeholder="例：サンダーショット 1号機"></label>
+            <label class="field"><span>シャーシ</span><select id="chassis"><option>FM-A</option><option>VZ</option><option>MA</option><option>MS</option><option>AR</option><option>スーパーII</option><option>スーパーX・XX</option></select></label>
+            <label class="field"><span>ボディ</span><input id="body-name" placeholder="ボディ名"></label>
+            <label class="field"><span>モーター</span><input id="motor" placeholder="例：マッハダッシュPRO"></label>
+            <label class="field"><span>モーター回転数</span><div class="unit"><input id="motor-rpm" type="number" value="20000" min="1000"><i>rpm</i></div></label>
+            <label class="field"><span>ギア比</span><select id="gear-ratio"><option value="3.5">3.5:1　超速</option><option value="3.7">3.7:1　ハイスピードEX</option><option value="4" selected>4:1　ハイスピード</option><option value="4.2">4.2:1　パワー寄り</option><option value="5">5:1　トルク重視</option></select></label>
+            <label class="field"><span>タイヤ径</span><div class="unit"><input id="tire-diameter" type="number" value="26" min="20" max="40" step="0.1"><i>mm</i></div></label>
+            <label class="field"><span>総重量</span><div class="unit"><input id="weight" type="number" min="0" step="0.1" placeholder="未計測"><i>g</i></div></label>
+          </div>
+          <div class="insight-grid"><div id="chassis-note" class="insight"></div><div id="gear-note" class="gear-note"></div><div class="speed"><span class="eyebrow">THEORETICAL SPEED</span><strong id="speed-value">24.5<small>km/h</small></strong><p>無負荷の理論値です。実走行では抵抗や重量により下がります。</p></div></div>
+        </div>
+
+        <div class="step-block">
+          <div class="step-title"><span>02</span><div><h2>写真を追加</h2><p>見える場所と内部を8方向から記録</p></div></div>
+          <div id="photo-grid" class="photo-grid"></div>
+        </div>
+
+        <div class="step-block">
+          <div class="step-title"><span>03</span><div><h2>使用パーツ</h2><p>商品番号とパーツ名を装着位置ごとに登録</p></div></div>
+          <div id="parts-groups" class="parts-groups"></div>
+        </div>
+
+        <div class="step-block">
+          <div class="step-title"><span>04</span><div><h2>メモと保存</h2><p>走らせた感触や次に変更したい点</p></div></div>
+          <label class="field"><span>セッティングメモ</span><textarea id="memo" rows="5" placeholder="コーナー後の加速、ジャンプ姿勢、次に変更する点など"></textarea></label>
+          <div class="save-bar"><p>この端末のブラウザ内に保存されます。</p><button class="primary large" type="submit">ガレージへ保存</button></div>
+        </div>
+      </form>
+    </section>
+
+    <section id="gears-view" class="view page">
+      <div class="page-heading"><span class="eyebrow">GEAR RATIO GUIDE</span><h1>ギア比ガイド</h1><p>数字が小さいほど最高速寄り。数字が大きいほど加速とトルク寄り。</p></div>
+      <div class="principle"><div><small>3.5 : 1</small><b>最高速重視</b><p>最高速が上がる<br>加速と登坂力が下がる</p></div><i></i><div><small>5 : 1</small><b>トルク重視</b><p>加速と登坂力が上がる<br>最高速が下がる</p></div></div>
+      <div class="compare"><label>変更前<select id="compare-from"><option value="3.5">3.5:1</option><option value="3.7">3.7:1</option><option value="4" selected>4:1</option><option value="4.2">4.2:1</option><option value="5">5:1</option></select></label><span>→</span><label>変更後<select id="compare-to"><option value="3.5" selected>3.5:1</option><option value="3.7">3.7:1</option><option value="4">4:1</option><option value="4.2">4.2:1</option><option value="5">5:1</option></select></label><div><small>理論上のタイヤ回転速度</small><b id="speed-change">+14.3%</b></div><div><small>理論上のタイヤ側トルク</small><b id="torque-change">-12.5%</b></div></div>
+      <div id="gear-list" class="gear-list"></div>
+    </section>
+  </main>
+
+  <footer><b>MINI 4WD SETTING GARAGE</b><span>GitHub Pages Edition</span></footer>
+  <script src="app.js"></script>
+</body>
+</html>
