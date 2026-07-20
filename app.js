@@ -28,9 +28,22 @@ const CHASSIS = {
   "スーパーX・XX": "ワイドトレッドで安定性が高いシャーシ。コーナーで踏ん張りやすい一方、幅と重量を意識します。"
 };
 
+const MOTORS = [
+  { name: "ノーマル", balance: "低速・扱いやすい", good: "速度を抑えやすく、完走重視の確認走行に向く", bad: "最高速と加速は控えめ", course: "初心者、完走確認、低速コース", gears: "3.5:1〜4:1" },
+  { name: "トルクチューン2 / PRO", balance: "加速・トルク寄り", good: "発進、コーナー後、坂で粘りやすい", bad: "長い直線の最高速はレブ系より控えめ", course: "コーナー、坂、重めのマシン", gears: "3.5:1〜3.7:1" },
+  { name: "レブチューン2 / PRO", balance: "最高速寄り", good: "軽いマシンの長い直線で速度を伸ばしやすい", bad: "加速と登坂力が弱く、重いマシンでは伸びにくい", course: "直線主体、軽量マシン", gears: "3.7:1〜4:1" },
+  { name: "アトミックチューン2 / PRO", balance: "バランス", good: "速度とトルクの偏りが小さく、基準を作りやすい", bad: "突出した最高速やトルクはない", course: "複合コース、最初の試走", gears: "3.5:1〜4:1" },
+  { name: "ライトダッシュ / PRO", balance: "ダッシュ入門", good: "チューン系より出力がありながら扱いやすい", bad: "強力なダッシュ系より最高速は控えめ", course: "テクニカルから中速コース", gears: "3.7:1〜4.2:1" },
+  { name: "ハイパーダッシュ3 / PRO", balance: "高出力バランス", good: "高速からテクニカルまで対応しやすく、速度と耐久性のバランス型", bad: "ブレーキや姿勢制御が弱いとコースアウトしやすい", course: "幅広いレースコース", gears: "3.7:1〜4.2:1" },
+  { name: "パワーダッシュ / マッハダッシュPRO", balance: "高出力・加速寄り", good: "重いマシン、坂、コーナー後でも強く加速しやすい", bad: "消費電力と発熱が増え、軽いマシンでは扱いにくい", course: "立体、坂、ストップ＆ゴー", gears: "4:1〜5:1" },
+  { name: "スプリントダッシュ", balance: "高出力・最高速寄り", good: "長い直線で高い速度を狙いやすい", bad: "加速、発熱、消費電力とコースアウト対策が難しい", course: "高速コース、上級者向け", gears: "4:1〜5:1" }
+];
+
 let db;
 let photoFiles = {};
 let currentMachines = [];
+let editingMachineId = null;
+let retainedPhotos = {};
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -64,12 +77,12 @@ function showView(name) {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-function renderPhotoSlots() {
+function renderPhotoSlots(existingPhotos = {}) {
   $("#photo-grid").innerHTML = PHOTO_SLOTS.map(([key, label, hint]) => `
-    <label class="photo-slot" data-photo-slot="${key}">
+    <label class="photo-slot${existingPhotos[key] ? " has-photo" : ""}" data-photo-slot="${key}">
       <input type="file" accept="image/*" data-photo="${key}">
       <span class="photo-icon">＋</span><b>${label}</b><small>${hint}</small>
-      <img alt="${label}のプレビュー">
+      <img ${existingPhotos[key] ? `src="${existingPhotos[key]}"` : ""} alt="${label}のプレビュー">
     </label>`).join("");
 
   $$('[data-photo]').forEach(input => input.addEventListener("change", () => {
@@ -97,6 +110,13 @@ function renderGearList() {
     <article><div class="gear-ratio"><strong>${gear.ratio}</strong><span>: 1</span></div>
       <div><small>${gear.type}</small><h2>${gear.name}</h2><p>${gear.memo}</p><b>向いている場面：${gear.course}</b></div>
     </article>`).join("");
+}
+
+function renderMotorList() {
+  $("#motor-list").innerHTML = MOTORS.map((motor, index) => `<article class="motor-card">
+    <div class="motor-number">${String(index + 1).padStart(2, "0")}</div><div class="motor-info"><small>${escapeHtml(motor.balance)}</small><h2>${escapeHtml(motor.name)}</h2>
+    <dl><div><dt>良いところ</dt><dd>${escapeHtml(motor.good)}</dd></div><div><dt>注意点</dt><dd>${escapeHtml(motor.bad)}</dd></div><div><dt>向くコース</dt><dd>${escapeHtml(motor.course)}</dd></div><div class="recommended-gear"><dt>ギア比の目安</dt><dd>${escapeHtml(motor.gears)}</dd></div></dl></div>
+  </article>`).join("");
 }
 
 function updateInsights() {
@@ -202,8 +222,37 @@ function showMachineDetail(id) {
       <div><dt>総重量</dt><dd>${machine.weight ? `${escapeHtml(machine.weight)} g` : "未登録"}</dd></div>
     </dl></section>
     <section class="detail-section"><h2>使用パーツ</h2><div class="detail-parts-grid">${parts}</div></section>
-    <section class="detail-section"><h2>セッティングメモ</h2><p class="detail-memo">${escapeHtml(machine.memo || "メモは登録されていません")}</p></section>`;
+    <section class="detail-section"><h2>セッティングメモ</h2><p class="detail-memo">${escapeHtml(machine.memo || "メモは登録されていません")}</p></section>
+    <button class="primary detail-edit" type="button" data-edit="${machine.id}">このマシンを編集</button>`;
+  $("#machine-detail [data-edit]").addEventListener("click", () => editMachine(machine.id));
   showView("detail");
+}
+
+function editMachine(id) {
+  const machine = currentMachines.find(item => item.id === id);
+  if (!machine) return toast("編集するマシンが見つかりませんでした");
+  editingMachineId = id;
+  retainedPhotos = { ...(machine.photos || {}) };
+  photoFiles = {};
+  $("#machine-name").value = machine.name || "";
+  $("#chassis").value = machine.chassis || "FM-A";
+  $("#body-name").value = machine.body || "";
+  $("#motor").value = machine.motor || "";
+  $("#motor-rpm").value = machine.motorRpm || 20000;
+  $("#gear-ratio").value = machine.gearRatio || 4;
+  $("#tire-diameter").value = machine.tireDiameter || 26;
+  $("#weight").value = machine.weight || "";
+  $("#memo").value = machine.memo || "";
+  PART_GROUPS.forEach(([zone]) => Array.from({ length: 5 }, (_, index) => {
+    const part = Array.isArray(machine.parts?.[zone]) ? machine.parts[zone][index] : null;
+    $(`.part-code[data-zone="${zone}"][data-index="${index}"]`).value = part?.code || "";
+    $(`.part-name[data-zone="${zone}"][data-index="${index}"]`).value = part?.name || "";
+  }));
+  renderPhotoSlots(retainedPhotos);
+  $("#machine-form button[type=submit]").textContent = "変更を保存";
+  $("#build-view .page-heading h1").textContent = "マシン編集";
+  updateInsights();
+  showView("build");
 }
 
 async function renderGarage() {
@@ -219,18 +268,20 @@ async function renderGarage() {
         <p>${escapeHtml(machine.motor || "モーター未登録")}　登録パーツ ${partCount}点</p>
         ${machine.memo ? `<blockquote>${escapeHtml(machine.memo)}</blockquote>` : ""}
         <button class="detail-button" data-detail="${machine.id}" type="button">詳細を見る</button>
+        <button class="edit-button" data-edit="${machine.id}" type="button">編集</button>
         <button class="delete-button" data-delete="${machine.id}" type="button">このマシンを削除</button>
       </div></article>`;
   }).join("");
   $$('[data-machine]').forEach(card => {
     card.addEventListener("click", event => {
-      if (event.target.closest("[data-delete]")) return;
+      if (event.target.closest("[data-delete], [data-edit]")) return;
       showMachineDetail(card.dataset.machine);
     });
     card.addEventListener("keydown", event => {
       if ((event.key === "Enter" || event.key === " ") && !event.target.closest("button")) showMachineDetail(card.dataset.machine);
     });
   });
+  $$('[data-edit]').forEach(button => button.addEventListener("click", () => editMachine(button.dataset.edit)));
   $$('[data-delete]').forEach(button => button.addEventListener("click", async () => {
     if (!confirm("このマシンを削除しますか？")) return;
     await removeMachine(button.dataset.delete);
@@ -252,7 +303,11 @@ function resetForm() {
   $("#motor-rpm").value = 20000;
   $("#tire-diameter").value = 26;
   photoFiles = {};
+  editingMachineId = null;
+  retainedPhotos = {};
   renderPhotoSlots();
+  $("#machine-form button[type=submit]").textContent = "ガレージへ保存";
+  $("#build-view .page-heading h1").textContent = "マシン登録";
   updateInsights();
 }
 
@@ -260,6 +315,7 @@ async function initialize() {
   renderPhotoSlots();
   renderPartGroups();
   renderGearList();
+  renderMotorList();
   setupFormNavigation();
   updateInsights();
   updateComparison();
@@ -271,6 +327,7 @@ async function initialize() {
   }
 
   $$('[data-view]').forEach(button => button.addEventListener("click", () => showView(button.dataset.view)));
+  $$('[data-view="build"]').forEach(button => button.addEventListener("click", resetForm));
   $("#add-machine").addEventListener("click", () => { resetForm(); showView("build"); });
   $("#detail-back").addEventListener("click", () => showView("garage"));
   ["#chassis", "#gear-ratio", "#motor-rpm", "#tire-diameter"].forEach(selector => $(selector).addEventListener("input", updateInsights));
@@ -289,27 +346,29 @@ async function initialize() {
       return toast("マシン名を入力してください");
     }
     const submit = event.submitter;
+    const isEditing = Boolean(editingMachineId);
     submit.disabled = true;
     submit.textContent = Object.keys(photoFiles).length ? "写真を保存中…" : "保存中…";
     let saved = false;
     try {
-      const photos = {};
+      const photos = { ...retainedPhotos };
       await Promise.all(Object.entries(photoFiles).map(async ([key, file]) => { photos[key] = await compressImage(file); }));
       const machine = {
-        id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
+        id: editingMachineId || (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`),
         name, chassis: $("#chassis").value,
         body: $("#body-name").value.trim(), motor: $("#motor").value.trim(),
         motorRpm: Number($("#motor-rpm").value), gearRatio: Number($("#gear-ratio").value),
         tireDiameter: Number($("#tire-diameter").value), weight: Number($("#weight").value) || null,
         memo: $("#memo").value.trim(), parts: collectParts(), photos,
-        createdAt: new Date().toISOString()
+        createdAt: editingMachineId ? (currentMachines.find(item => item.id === editingMachineId)?.createdAt || new Date().toISOString()) : new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       };
       await saveMachine(machine);
       saved = true;
       await renderGarage();
       resetForm();
       showView("garage");
-      toast("マシンをガレージへ保存しました");
+      toast(isEditing ? "変更を保存しました" : "マシンをガレージへ保存しました");
     } catch (error) {
       console.error(error);
       if (saved) {
@@ -323,7 +382,7 @@ async function initialize() {
       }
     } finally {
       submit.disabled = false;
-      submit.textContent = "ガレージへ保存";
+      submit.textContent = editingMachineId ? "変更を保存" : "ガレージへ保存";
     }
   });
 }

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#e4472f">
   <title>MINI 4WD SETTING GARAGE</title>
-  <link rel="stylesheet" href="styles.css?v=3">
+  <link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
   <header class="topbar">
@@ -13,6 +13,7 @@
     <nav>
       <button class="nav-button active" data-view="garage">ガレージ</button>
       <button class="nav-button" data-view="build">マシン登録</button>
+      <button class="nav-button" data-view="motors">モーター</button>
       <button class="nav-button" data-view="gears">ギア比ガイド</button>
     </nav>
     <button class="primary desktop-add" data-view="build">新規マシン</button>
@@ -75,9 +76,15 @@
       <div class="compare"><label>変更前<select id="compare-from"><option value="3.5">3.5:1</option><option value="3.7">3.7:1</option><option value="4" selected>4:1</option><option value="4.2">4.2:1</option><option value="5">5:1</option></select></label><span>→</span><label>変更後<select id="compare-to"><option value="3.5" selected>3.5:1</option><option value="3.7">3.7:1</option><option value="4">4:1</option><option value="4.2">4.2:1</option><option value="5">5:1</option></select></label><div><small>理論上のタイヤ回転速度</small><b id="speed-change">+14.3%</b></div><div><small>理論上のタイヤ側トルク</small><b id="torque-change">-12.5%</b></div></div>
       <div id="gear-list" class="gear-list"></div>
     </section>
+
+    <section id="motors-view" class="view page">
+      <div class="page-heading"><span class="eyebrow">MOTOR GUIDE</span><h1>モーターガイド</h1><p>速度、加速、扱いやすさと、合わせやすいギア比の目安。</p></div>
+      <div class="motor-caution"><b>組み合わせはコースと重量で変わります</b><p>まず推奨ギアから試走し、速度が足りなければ小さい比率、立ち上がりや坂が苦しければ大きい比率へ変更してください。</p></div>
+      <div id="motor-list" class="motor-list"></div>
+    </section>
   </main>
 
   <footer><b>MINI 4WD SETTING GARAGE</b><span>GitHub Pages Edition</span></footer>
-  <script src="app.js?v=3"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>
