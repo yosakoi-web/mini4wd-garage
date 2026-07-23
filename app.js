@@ -119,15 +119,33 @@ function renderMotorList() {
   </article>`).join("");
 }
 
+function calculateWeightImpact(rpm, ratio, tire, weight) {
+  const theoretical = rpm / ratio * Math.PI * tire * 60 / 1000000;
+  if (!weight || weight <= 0) return { theoretical, adjusted: null, percent: 0, difference: 0 };
+  const gramsFromBaseline = weight - 100;
+  const percent = gramsFromBaseline >= 0
+    ? Math.min(25, gramsFromBaseline * 0.18)
+    : Math.max(-5, gramsFromBaseline * 0.10);
+  const adjusted = theoretical * (1 - percent / 100);
+  return { theoretical, adjusted, percent, difference: adjusted - theoretical };
+}
+
 function updateInsights() {
   const ratio = Number($("#gear-ratio").value);
   const rpm = Number($("#motor-rpm").value) || 0;
   const tire = Number($("#tire-diameter").value) || 0;
+  const weight = Number($("#weight").value) || 0;
   const gear = GEARS.find(item => item.ratio === ratio);
   $("#chassis-note").innerHTML = `<b>${$("#chassis").value}の特徴</b><p>${CHASSIS[$("#chassis").value]}</p>`;
   $("#gear-note").innerHTML = `<b>${gear.name}</b><p>${gear.memo}</p>`;
-  const speed = rpm / ratio * Math.PI * tire * 60 / 1000000;
-  $("#speed-value").innerHTML = `${speed.toFixed(1)}<small>km/h</small>`;
+  const impact = calculateWeightImpact(rpm, ratio, tire, weight);
+  $("#speed-value").innerHTML = `${impact.theoretical.toFixed(1)}<small>km/h</small>`;
+  if (!impact.adjusted) {
+    $("#weight-impact").innerHTML = `<small>WEIGHT EFFECT</small><b>総重量を入力すると表示します</b>`;
+  } else {
+    const direction = impact.percent > 0 ? "低下" : impact.percent < 0 ? "向上" : "変化なし";
+    $("#weight-impact").innerHTML = `<small>100g基準の重量補正</small><strong>${impact.adjusted.toFixed(1)}<i>km/h</i></strong><b>${Math.abs(impact.percent).toFixed(1)}% ${direction}（${Math.abs(impact.difference).toFixed(1)}km/h ${direction}）</b><p>重量だけの簡易補正です。10g増加につき約1.8%低下として計算しています。</p>`;
+  }
 }
 
 function updateComparison() {
@@ -210,6 +228,7 @@ function showMachineDetail(id) {
     const items = Array.isArray(machine.parts?.[zone]) ? machine.parts[zone] : [];
     return `<section class="detail-parts"><h3>${escapeHtml(label)}</h3>${items.length ? `<ol>${items.map(part => `<li><b>${escapeHtml(part.code || "番号なし")}</b><span>${escapeHtml(part.name || "パーツ名未登録")}</span></li>`).join("")}</ol>` : `<p>登録なし</p>`}</section>`;
   }).join("");
+  const savedImpact = calculateWeightImpact(Number(machine.motorRpm) || 0, Number(machine.gearRatio) || 4, Number(machine.tireDiameter) || 26, Number(machine.weight) || 0);
   $("#machine-detail").innerHTML = `
     <header class="detail-heading"><span class="eyebrow">MACHINE DETAIL</span><h1>${escapeHtml(machine.name)}</h1><p>${escapeHtml(machine.chassis || "未登録")} シャーシ</p></header>
     ${photos ? `<div class="detail-photos">${photos}</div>` : `<div class="detail-no-photo">写真は登録されていません</div>`}
@@ -220,6 +239,7 @@ function showMachineDetail(id) {
       <div><dt>ギア比</dt><dd>${machine.gearRatio ? `${escapeHtml(machine.gearRatio)} : 1` : "未登録"}</dd></div>
       <div><dt>タイヤ径</dt><dd>${machine.tireDiameter ? `${escapeHtml(machine.tireDiameter)} mm` : "未登録"}</dd></div>
       <div><dt>総重量</dt><dd>${machine.weight ? `${escapeHtml(machine.weight)} g` : "未登録"}</dd></div>
+      <div><dt>重量補正速度</dt><dd>${savedImpact.adjusted ? `${savedImpact.adjusted.toFixed(1)} km/h（100g基準）` : "重量未登録"}</dd></div>
     </dl></section>
     <section class="detail-section"><h2>使用パーツ</h2><div class="detail-parts-grid">${parts}</div></section>
     <section class="detail-section"><h2>セッティングメモ</h2><p class="detail-memo">${escapeHtml(machine.memo || "メモは登録されていません")}</p></section>
@@ -330,7 +350,7 @@ async function initialize() {
   $$('[data-view="build"]').forEach(button => button.addEventListener("click", resetForm));
   $("#add-machine").addEventListener("click", () => { resetForm(); showView("build"); });
   $("#detail-back").addEventListener("click", () => showView("garage"));
-  ["#chassis", "#gear-ratio", "#motor-rpm", "#tire-diameter"].forEach(selector => $(selector).addEventListener("input", updateInsights));
+  ["#chassis", "#gear-ratio", "#motor-rpm", "#tire-diameter", "#weight"].forEach(selector => $(selector).addEventListener("input", updateInsights));
   ["#compare-from", "#compare-to"].forEach(selector => $(selector).addEventListener("input", updateComparison));
 
   $("#machine-form").addEventListener("submit", async event => {
