@@ -254,6 +254,72 @@ function historyHtml(machine) {
   }).join("")}</div>`;
 }
 
+function comparisonPanelHtml(machine) {
+  const runs = [...(Array.isArray(machine.runs) ? machine.runs : [])].sort((a, b) => String(b.date || b.createdAt || "").localeCompare(String(a.date || a.createdAt || "")));
+  if (runs.length < 2) return `<div class="compare-empty"><b>比較には履歴が2件必要です</b><p>異なるセッティングを2回以上保存すると、変更点とタイム差を比較できます。</p></div>`;
+  const options = runs.map(run => `<option value="${run.id}">${escapeHtml(run.date || "日付なし")}　${escapeHtml(run.course || "コース名なし")}　${escapeHtml(run.result || "試走")}</option>`).join("");
+  return `<div class="setting-compare"><div class="compare-selectors">
+    <label><span>変更前</span><select id="compare-run-a">${options}</select></label><b>→</b>
+    <label><span>変更後</span><select id="compare-run-b">${options}</select></label>
+  </div><div id="run-comparison-result"></div></div>`;
+}
+
+function comparisonRow(label, before, after) {
+  const a = before || "未登録";
+  const b = after || "未登録";
+  const changed = String(a) !== String(b);
+  return `<div class="comparison-row${changed ? " changed" : ""}"><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(a)}</dd><i>→</i><dd>${escapeHtml(b)}</dd></div>`;
+}
+
+function photoComparisonColumn(run, side) {
+  const photos = PHOTO_SLOTS.filter(([key]) => run.setting?.photos?.[key]).map(([key, label]) => `<figure><img src="${run.setting.photos[key]}" alt="${escapeHtml(label)}"><figcaption>${escapeHtml(label)}</figcaption></figure>`).join("");
+  return `<section><h4>${side}　${escapeHtml(run.date || "日付なし")}</h4>${photos ? `<div>${photos}</div>` : `<p>写真なし</p>`}</section>`;
+}
+
+function renderRunComparison(machine) {
+  const target = $("#run-comparison-result");
+  if (!target) return;
+  const before = (machine.runs || []).find(run => run.id === $("#compare-run-a").value);
+  const after = (machine.runs || []).find(run => run.id === $("#compare-run-b").value);
+  if (!before || !after) return;
+  const a = before.setting || {};
+  const b = after.setting || {};
+  const aSpeed = calculateWeightImpact(Number(a.motorRpm) || 0, Number(a.gearRatio) || 4, Number(a.tireDiameter) || 26, Number(a.weight) || 0);
+  const bSpeed = calculateWeightImpact(Number(b.motorRpm) || 0, Number(b.gearRatio) || 4, Number(b.tireDiameter) || 26, Number(b.weight) || 0);
+  let timeResult = `<b>両方のタイムを入力すると差を表示します</b>`;
+  if (before.time && after.time) {
+    const delta = Number(after.time) - Number(before.time);
+    timeResult = delta < 0
+      ? `<strong class="faster">${Math.abs(delta).toFixed(3)}秒速くなりました</strong>`
+      : delta > 0 ? `<strong class="slower">${delta.toFixed(3)}秒遅くなりました</strong>` : `<strong>タイムは同じです</strong>`;
+  }
+  const partChanges = PART_GROUPS.map(([zone, label]) => {
+    const beforeParts = Array.isArray(a.parts?.[zone]) ? a.parts[zone] : [];
+    const afterParts = Array.isArray(b.parts?.[zone]) ? b.parts[zone] : [];
+    const key = part => `${part.code || ""}|${part.name || ""}`;
+    const beforeKeys = new Set(beforeParts.map(key));
+    const afterKeys = new Set(afterParts.map(key));
+    const removed = beforeParts.filter(part => !afterKeys.has(key(part)));
+    const added = afterParts.filter(part => !beforeKeys.has(key(part)));
+    return `<section class="part-diff"><h4>${escapeHtml(label)}</h4>${!removed.length && !added.length ? `<p>変更なし</p>` : `${removed.map(part => `<div class="removed"><b>削除</b><span>${escapeHtml(part.code || "番号なし")} ${escapeHtml(part.name || "")}</span></div>`).join("")}${added.map(part => `<div class="added"><b>追加</b><span>${escapeHtml(part.code || "番号なし")} ${escapeHtml(part.name || "")}</span></div>`).join("")}`}</section>`;
+  }).join("");
+  target.innerHTML = `<div class="time-comparison"><small>TIME DIFFERENCE</small>${timeResult}<p>${before.time ? `${escapeHtml(before.time)}秒` : "未計測"} → ${after.time ? `${escapeHtml(after.time)}秒` : "未計測"}</p></div>
+    <dl class="comparison-table">
+      ${comparisonRow("結果", before.result, after.result)}
+      ${comparisonRow("シャーシ", a.chassis, b.chassis)}
+      ${comparisonRow("ボディ", a.body, b.body)}
+      ${comparisonRow("モーター", a.motor, b.motor)}
+      ${comparisonRow("回転数", a.motorRpm ? `${a.motorRpm} rpm` : "", b.motorRpm ? `${b.motorRpm} rpm` : "")}
+      ${comparisonRow("ギア比", a.gearRatio ? `${a.gearRatio}:1` : "", b.gearRatio ? `${b.gearRatio}:1` : "")}
+      ${comparisonRow("タイヤ径", a.tireDiameter ? `${a.tireDiameter} mm` : "", b.tireDiameter ? `${b.tireDiameter} mm` : "")}
+      ${comparisonRow("重量", a.weight ? `${a.weight} g` : "", b.weight ? `${b.weight} g` : "")}
+      ${comparisonRow("理論速度", `${aSpeed.theoretical.toFixed(1)} km/h`, `${bSpeed.theoretical.toFixed(1)} km/h`)}
+      ${comparisonRow("重量補正速度", aSpeed.adjusted ? `${aSpeed.adjusted.toFixed(1)} km/h` : "重量未登録", bSpeed.adjusted ? `${bSpeed.adjusted.toFixed(1)} km/h` : "重量未登録")}
+    </dl>
+    <h3 class="compare-subtitle">パーツ変更点</h3><div class="part-diff-grid">${partChanges}</div>
+    <h3 class="compare-subtitle">写真比較</h3><div class="comparison-photos">${photoComparisonColumn(before, "変更前")}${photoComparisonColumn(after, "変更後")}</div>`;
+}
+
 function showMachineDetail(id) {
   const machine = currentMachines.find(item => item.id === id);
   if (!machine) return toast("マシン情報が見つかりませんでした");
@@ -279,6 +345,7 @@ function showMachineDetail(id) {
     <section class="detail-section"><h2>使用パーツ</h2><div class="detail-parts-grid">${parts}</div></section>
     <section class="detail-section"><h2>セッティングメモ</h2><p class="detail-memo">${escapeHtml(machine.memo || "メモは登録されていません")}</p></section>
     <section class="detail-section run-history"><div class="history-title"><div><span class="eyebrow">SETTING HISTORY</span><h2>走行・完走セッティング履歴</h2></div><button class="primary" type="button" data-add-run>現在の状態を履歴保存</button></div>${historyHtml(machine)}</section>
+    <section class="detail-section comparison-section"><span class="eyebrow">SETTING COMPARISON</span><h2>セッティング比較</h2>${comparisonPanelHtml(machine)}</section>
     <button class="primary detail-edit" type="button" data-edit="${machine.id}">現在のマシンを編集</button>
     <dialog id="run-dialog" class="run-dialog"><form id="run-form">
       <div class="dialog-head"><div><span class="eyebrow">SAVE SETTING</span><h2>走行結果を保存</h2></div><button type="button" data-close-run aria-label="閉じる">×</button></div>
@@ -329,6 +396,13 @@ function showMachineDetail(id) {
     showMachineDetail(machine.id);
     toast("走行履歴を削除しました");
   }));
+  const sortedRuns = [...(Array.isArray(machine.runs) ? machine.runs : [])].sort((a, b) => String(b.date || b.createdAt || "").localeCompare(String(a.date || a.createdAt || "")));
+  if (sortedRuns.length >= 2) {
+    $("#compare-run-a").value = sortedRuns[1].id;
+    $("#compare-run-b").value = sortedRuns[0].id;
+    ["#compare-run-a", "#compare-run-b"].forEach(selector => $(selector).addEventListener("change", () => renderRunComparison(machine)));
+    renderRunComparison(machine);
+  }
   showView("detail");
 }
 
