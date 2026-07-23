@@ -219,6 +219,41 @@ function setupFormNavigation() {
   }
 }
 
+function createSettingSnapshot(machine) {
+  return {
+    name: machine.name || "", chassis: machine.chassis || "", body: machine.body || "",
+    motor: machine.motor || "", motorRpm: machine.motorRpm || 0, gearRatio: machine.gearRatio || 4,
+    tireDiameter: machine.tireDiameter || 26, weight: machine.weight || null, memo: machine.memo || "",
+    parts: JSON.parse(JSON.stringify(machine.parts || {})), photos: { ...(machine.photos || {}) }
+  };
+}
+
+function historyPartsHtml(parts = {}) {
+  return PART_GROUPS.map(([zone, label]) => {
+    const items = Array.isArray(parts[zone]) ? parts[zone] : [];
+    return `<section class="history-parts"><h4>${escapeHtml(label)}</h4>${items.length ? `<ul>${items.map(part => `<li><b>${escapeHtml(part.code || "番号なし")}</b><span>${escapeHtml(part.name || "名称未登録")}</span></li>`).join("")}</ul>` : `<p>登録なし</p>`}</section>`;
+  }).join("");
+}
+
+function historyHtml(machine) {
+  const runs = [...(Array.isArray(machine.runs) ? machine.runs : [])].sort((a, b) => String(b.date || b.createdAt || "").localeCompare(String(a.date || a.createdAt || "")));
+  if (!runs.length) return `<div class="history-empty"><b>走行履歴はまだありません</b><p>完走した状態や試走結果を、現在のセッティングとは別に保存できます。</p></div>`;
+  return `<div class="history-list">${runs.map(run => {
+    const setting = run.setting || {};
+    const photos = PHOTO_SLOTS.filter(([key]) => setting.photos?.[key]).map(([key, label]) => `<figure><img src="${setting.photos[key]}" alt="${escapeHtml(label)}"><figcaption>${escapeHtml(label)}</figcaption></figure>`).join("");
+    return `<article class="history-card">
+      <header><div><time>${escapeHtml(run.date || "日付未登録")}</time><h3>${escapeHtml(run.course || "コース名未登録")}</h3></div><span data-result="${escapeHtml(run.result || "試走")}">${escapeHtml(run.result || "試走")}</span></header>
+      <div class="history-summary"><b>${run.time ? `${escapeHtml(run.time)}秒` : "タイム未計測"}</b><span>${escapeHtml(setting.motor || "モーター未登録")}</span><span>${escapeHtml(setting.gearRatio || "-")}:1</span><span>${setting.weight ? `${escapeHtml(setting.weight)}g` : "重量未登録"}</span></div>
+      ${run.memo ? `<p class="history-note">${escapeHtml(run.memo)}</p>` : ""}
+      <details><summary>保存した写真と全パーツを見る</summary>
+        ${photos ? `<div class="history-photos">${photos}</div>` : `<p class="history-no-photo">写真なし</p>`}
+        <div class="history-parts-grid">${historyPartsHtml(setting.parts)}</div>
+      </details>
+      <div class="history-actions"><button type="button" data-run-edit="${run.id}">この構成から編集</button><button type="button" data-run-delete="${run.id}">履歴を削除</button></div>
+    </article>`;
+  }).join("")}</div>`;
+}
+
 function showMachineDetail(id) {
   const machine = currentMachines.find(item => item.id === id);
   if (!machine) return toast("マシン情報が見つかりませんでした");
@@ -243,34 +278,85 @@ function showMachineDetail(id) {
     </dl></section>
     <section class="detail-section"><h2>使用パーツ</h2><div class="detail-parts-grid">${parts}</div></section>
     <section class="detail-section"><h2>セッティングメモ</h2><p class="detail-memo">${escapeHtml(machine.memo || "メモは登録されていません")}</p></section>
-    <button class="primary detail-edit" type="button" data-edit="${machine.id}">このマシンを編集</button>`;
+    <section class="detail-section run-history"><div class="history-title"><div><span class="eyebrow">SETTING HISTORY</span><h2>走行・完走セッティング履歴</h2></div><button class="primary" type="button" data-add-run>現在の状態を履歴保存</button></div>${historyHtml(machine)}</section>
+    <button class="primary detail-edit" type="button" data-edit="${machine.id}">現在のマシンを編集</button>
+    <dialog id="run-dialog" class="run-dialog"><form id="run-form">
+      <div class="dialog-head"><div><span class="eyebrow">SAVE SETTING</span><h2>走行結果を保存</h2></div><button type="button" data-close-run aria-label="閉じる">×</button></div>
+      <div class="run-form-grid">
+        <label><span>走行日</span><input id="run-date" type="date" required></label>
+        <label><span>コース名</span><input id="run-course" required placeholder="例：○○サーキット"></label>
+        <label><span>結果</span><select id="run-result"><option>完走</option><option>コースアウト</option><option>リタイア</option><option>試走</option></select></label>
+        <label><span>タイム</span><div class="unit"><input id="run-time" type="number" min="0" step="0.001" placeholder="未計測"><i>秒</i></div></label>
+      </div>
+      <label class="run-note"><span>走行メモ</span><textarea id="run-memo" rows="4" placeholder="コーナー、ジャンプ、ブレーキ、次に変更したい点など"></textarea></label>
+      <p>現在表示中の写真と全パーツ構成を固定保存します。</p><button class="primary" type="submit">履歴へ保存</button>
+    </form></dialog>`;
   $("#machine-detail [data-edit]").addEventListener("click", () => editMachine(machine.id));
+  const dialog = $("#run-dialog");
+  $("#machine-detail [data-add-run]").addEventListener("click", () => {
+    $("#run-date").value = new Date().toLocaleDateString("sv-SE");
+    dialog.showModal();
+  });
+  $("#machine-detail [data-close-run]").addEventListener("click", () => dialog.close());
+  $("#run-form").addEventListener("submit", async event => {
+    event.preventDefault();
+    const run = {
+      id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
+      date: $("#run-date").value, course: $("#run-course").value.trim(), result: $("#run-result").value,
+      time: Number($("#run-time").value) || null, memo: $("#run-memo").value.trim(),
+      setting: createSettingSnapshot(machine), createdAt: new Date().toISOString()
+    };
+    machine.runs = [...(Array.isArray(machine.runs) ? machine.runs : []), run];
+    try {
+      await saveMachine(machine);
+      dialog.close();
+      await renderGarage();
+      showMachineDetail(machine.id);
+      toast("現在のセッティングを履歴へ保存しました");
+    } catch (error) {
+      toast(error?.name === "QuotaExceededError" ? "保存容量が不足しています。写真の多い履歴を整理してください" : "履歴を保存できませんでした");
+    }
+  });
+  $$('[data-run-edit]').forEach(button => button.addEventListener("click", () => {
+    const run = (machine.runs || []).find(item => item.id === button.dataset.runEdit);
+    if (run?.setting) editMachine(machine.id, run.setting);
+  }));
+  $$('[data-run-delete]').forEach(button => button.addEventListener("click", async () => {
+    if (!confirm("この走行履歴を削除しますか？ 現在のマシン設定は削除されません。")) return;
+    machine.runs = (machine.runs || []).filter(item => item.id !== button.dataset.runDelete);
+    await saveMachine(machine);
+    await renderGarage();
+    showMachineDetail(machine.id);
+    toast("走行履歴を削除しました");
+  }));
   showView("detail");
 }
 
-function editMachine(id) {
+function editMachine(id, savedSetting = null) {
   const machine = currentMachines.find(item => item.id === id);
   if (!machine) return toast("編集するマシンが見つかりませんでした");
+  const source = savedSetting || machine;
   editingMachineId = id;
-  retainedPhotos = { ...(machine.photos || {}) };
+  retainedPhotos = { ...(source.photos || {}) };
   photoFiles = {};
-  $("#machine-name").value = machine.name || "";
-  $("#chassis").value = machine.chassis || "FM-A";
-  $("#body-name").value = machine.body || "";
-  $("#motor").value = machine.motor || "";
-  $("#motor-rpm").value = machine.motorRpm || 20000;
-  $("#gear-ratio").value = machine.gearRatio || 4;
-  $("#tire-diameter").value = machine.tireDiameter || 26;
-  $("#weight").value = machine.weight || "";
-  $("#memo").value = machine.memo || "";
+  $("#machine-name").value = source.name || machine.name || "";
+  $("#chassis").value = source.chassis || "FM-A";
+  $("#body-name").value = source.body || "";
+  $("#motor").value = source.motor || "";
+  $("#motor-rpm").value = source.motorRpm || 20000;
+  $("#gear-ratio").value = source.gearRatio || 4;
+  $("#tire-diameter").value = source.tireDiameter || 26;
+  $("#weight").value = source.weight || "";
+  $("#memo").value = source.memo || "";
   PART_GROUPS.forEach(([zone]) => Array.from({ length: 5 }, (_, index) => {
-    const part = Array.isArray(machine.parts?.[zone]) ? machine.parts[zone][index] : null;
+    const part = Array.isArray(source.parts?.[zone]) ? source.parts[zone][index] : null;
     $(`.part-code[data-zone="${zone}"][data-index="${index}"]`).value = part?.code || "";
     $(`.part-name[data-zone="${zone}"][data-index="${index}"]`).value = part?.name || "";
   }));
   renderPhotoSlots(retainedPhotos);
   $("#machine-form button[type=submit]").textContent = "変更を保存";
   $("#build-view .page-heading h1").textContent = "マシン編集";
+  if (savedSetting) toast("履歴の構成を編集画面へ読み込みました。保存するまで現在設定は変わりません");
   updateInsights();
   showView("build");
 }
@@ -285,7 +371,7 @@ async function renderGarage() {
     return `<article class="machine-card" data-machine="${machine.id}" tabindex="0" role="button" aria-label="${escapeHtml(machine.name)}の詳細を見る">
       <div class="machine-photo">${photo ? `<img src="${photo}" alt="${escapeHtml(machine.name)}">` : `<div class="empty-car"></div>`}</div>
       <div class="machine-card-body"><small>${escapeHtml(machine.chassis)} / ${escapeHtml(machine.gearRatio)}:1</small><h2>${escapeHtml(machine.name)}</h2>
-        <p>${escapeHtml(machine.motor || "モーター未登録")}　登録パーツ ${partCount}点</p>
+        <p>${escapeHtml(machine.motor || "モーター未登録")}　登録パーツ ${partCount}点　走行履歴 ${Array.isArray(machine.runs) ? machine.runs.length : 0}件</p>
         ${machine.memo ? `<blockquote>${escapeHtml(machine.memo)}</blockquote>` : ""}
         <button class="detail-button" data-detail="${machine.id}" type="button">詳細を見る</button>
         <button class="edit-button" data-edit="${machine.id}" type="button">編集</button>
@@ -380,6 +466,7 @@ async function initialize() {
         motorRpm: Number($("#motor-rpm").value), gearRatio: Number($("#gear-ratio").value),
         tireDiameter: Number($("#tire-diameter").value), weight: Number($("#weight").value) || null,
         memo: $("#memo").value.trim(), parts: collectParts(), photos,
+        runs: editingMachineId ? (currentMachines.find(item => item.id === editingMachineId)?.runs || []) : [],
         createdAt: editingMachineId ? (currentMachines.find(item => item.id === editingMachineId)?.createdAt || new Date().toISOString()) : new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
